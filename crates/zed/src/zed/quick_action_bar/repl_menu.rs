@@ -204,8 +204,20 @@ impl QuickActionBar {
                     )
                     .separator()
                     .action("View Sessions", Box::new(repl::Sessions))
-                    // TODO: Add shut down all kernels action
-                    // .action("Shut Down all Kernels", Box::new(gpui::NoAction))
+                    .custom_entry(
+                        move |_window, _cx| {
+                            Label::new("Shut Down All Kernels")
+                                .size(LabelSize::Small)
+                                .color(Color::Error)
+                                .into_any_element()
+                        },
+                        {
+                            let editor = editor.clone();
+                            move |window, cx| {
+                                window.dispatch_action(Box::new(repl::ShutdownAll {}), cx);
+                            }
+                        },
+                    )
                 })
                 .into()
             })

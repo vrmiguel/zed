@@ -20,12 +20,29 @@ pub use crate::jupyter_settings::JupyterSettings;
 pub use crate::kernels::{Kernel, KernelSpecification, KernelStatus};
 pub use crate::repl_editor::*;
 pub use crate::repl_sessions_ui::{
-    ClearOutputs, Interrupt, ReplSessionsPage, Restart, Run, Sessions, Shutdown,
+    ClearOutputs, Interrupt, ReplSessionsPage, Restart, Run, Sessions, Shutdown, ShutdownAll,
 };
 use crate::repl_store::ReplStore;
 pub use crate::session::Session;
 
 pub const KERNEL_DOCS_URL: &str = "https://zed.dev/docs/repl#changing-kernels";
+
+pub fn shutdown_all_kernels(window: &mut Window, cx: &mut WindowContext) {
+    let store = ReplStore::global(cx);
+    store.update(cx, |store, cx| {
+        for session in store.sessions() {
+            session.update(cx, |this, cx| {
+                this.shutdown(cx);
+            }); 
+        }
+        
+        // Since the shutdown process is asynchronous, we wait a bit and then refresh the UI
+        cx.spawn(|mut cx| async move {
+            cx.background_executor().timer(Duration::from_secs(1)).await;
+            cx.notify();
+        }).detach();
+    });
+}
 
 pub fn init(fs: Arc<dyn Fs>, cx: &mut App) {
     set_dispatcher(zed_dispatcher(cx));

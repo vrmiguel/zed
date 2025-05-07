@@ -23,7 +23,8 @@ actions!(
         Interrupt,
         Shutdown,
         Restart,
-        RefreshKernelspecs
+        RefreshKernelspecs,
+        ShutdownAll
     ]
 );
 
