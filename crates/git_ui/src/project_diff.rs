@@ -417,8 +417,13 @@ impl ProjectDiff {
         self.editor.update(cx, |editor, cx| {
             if was_empty {
                 editor.change_selections(None, window, cx, |selections| {
-                    // TODO select the very beginning (possibly inside a deletion)
-                    selections.select_ranges([0..0])
+                    // Find first change - looking at both additions and deletions
+                    let pos = if let Some(first_hunk) = diff_hunk_ranges.first() {
+                        first_hunk.start
+                    } else {
+                        0
+                    };
+                    selections.select_ranges([pos..pos])
                 });
             }
             if is_excerpt_newly_added && diff_buffer.file_status.is_deleted() {
