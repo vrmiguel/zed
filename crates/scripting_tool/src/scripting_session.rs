@@ -746,9 +746,17 @@ impl ScriptingSession {
                             // TODO: Better limit? For now this is the same as
                             // MAX_SEARCH_RESULT_FILES.
                             let limit = 5000;
-                            // TODO: Providing non-empty open_entries can make this a bit more
-                            // efficient as it can skip checking that these paths are textual.
-                            let open_entries = HashSet::default();
+                            // Get paths from currently open buffers as we know they are textual
+                            let open_entries = session
+                                .changes_by_buffer
+                                .keys()
+                                .filter_map(|buffer| {
+                                    buffer.read(cx).file().map(|file| ProjectPath {
+                                        worktree_id: file.worktree_id(),
+                                        path: file.path().clone(),
+                                    })
+                                })
+                                .collect();
                             let candidates = worktree_store.find_search_candidates(
                                 search_query,
                                 limit,
