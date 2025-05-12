@@ -18,6 +18,13 @@ pub trait NSAttributedString: Sized {
     unsafe fn string(self) -> id;
 }
 
+#[allow(non_snake_case)]
+pub trait NSTextAttachment: Sized {
+    unsafe fn alloc(_: Self) -> id {
+        msg_send![class!(NSTextAttachment), alloc]
+    }
+}
+
 impl NSAttributedString for id {
     unsafe fn init_attributed_string(self, string: id) -> id {
         msg_send![self, initWithString: string]
@@ -48,6 +55,8 @@ pub trait NSMutableAttributedString: NSAttributedString {
 
 impl NSMutableAttributedString for id {}
 
+impl NSTextAttachment for id {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,15 +66,6 @@ mod tests {
     #[test]
     #[ignore] // This was SIGSEGV-ing on CI but not locally; need to investigate https://github.com/zed-industries/zed/actions/runs/10362363230/job/28684225486?pr=15782#step:4:1348
     fn test_nsattributed_string() {
-        // TODO move these to parent module once it's actually ready to be used
-        #[allow(non_snake_case)]
-        pub trait NSTextAttachment: Sized {
-            unsafe fn alloc(_: Self) -> id {
-                msg_send![class!(NSTextAttachment), alloc]
-            }
-        }
-
-        impl NSTextAttachment for id {}
 
         unsafe {
             let image: id = msg_send![class!(NSImage), alloc];
