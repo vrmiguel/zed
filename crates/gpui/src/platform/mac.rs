@@ -48,6 +48,15 @@ pub(crate) use display_link::*;
 pub(crate) use platform::*;
 pub(crate) use window::*;
 
+#[allow(non_snake_case)]
+pub trait NSTextAttachment: Sized {
+    unsafe fn alloc(_: Self) -> id {
+        msg_send![class!(NSTextAttachment), alloc]
+    }
+}
+
+impl NSTextAttachment for id {}
+
 #[cfg(feature = "font-kit")]
 pub(crate) use text_system::*;
 

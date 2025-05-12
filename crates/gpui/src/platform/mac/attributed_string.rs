@@ -57,16 +57,8 @@ mod tests {
     #[test]
     #[ignore] // This was SIGSEGV-ing on CI but not locally; need to investigate https://github.com/zed-industries/zed/actions/runs/10362363230/job/28684225486?pr=15782#step:4:1348
     fn test_nsattributed_string() {
-        // TODO move these to parent module once it's actually ready to be used
-        #[allow(non_snake_case)]
-        pub trait NSTextAttachment: Sized {
-            unsafe fn alloc(_: Self) -> id {
-                msg_send![class!(NSTextAttachment), alloc]
-            }
-        }
-
-        impl NSTextAttachment for id {}
-
+        use super::NSTextAttachment;
+        
         unsafe {
             let image: id = msg_send![class!(NSImage), alloc];
             image.initWithContentsOfFile_(NSString::alloc(nil).init_str("test.jpeg"));
