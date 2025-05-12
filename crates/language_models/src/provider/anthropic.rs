@@ -294,8 +294,14 @@ pub fn count_anthropic_tokens(
                     MessageContent::Image(image) => {
                         tokens_from_images += image.estimate_tokens();
                     }
-                    MessageContent::ToolUse(_tool_use) => {
-                        // TODO: Estimate token usage from tool uses.
+                    MessageContent::ToolUse(tool_use) => {
+                        // Add tool use name
+                        string_contents.push_str(&format!("Tool Name: {}\n", tool_use.name));
+
+                        // Add input parameters as JSON string
+                        if let Ok(input_str) = serde_json::to_string(&tool_use.input) {
+                            string_contents.push_str(&format!("Input: {}", input_str));
+                        }
                     }
                     MessageContent::ToolResult(tool_result) => {
                         string_contents.push_str(&tool_result.content);
