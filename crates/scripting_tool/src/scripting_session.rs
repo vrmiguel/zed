@@ -743,12 +743,16 @@ impl ScriptingSession {
                 session.update(&mut cx, |session, cx| {
                     session.project.update(cx, |project, cx| {
                         project.worktree_store().update(cx, |worktree_store, cx| {
-                            // TODO: Better limit? For now this is the same as
-                            // MAX_SEARCH_RESULT_FILES.
+                            // Use same limit as MAX_SEARCH_RESULT_FILES
                             let limit = 5000;
-                            // TODO: Providing non-empty open_entries can make this a bit more
-                            // efficient as it can skip checking that these paths are textual.
-                            let open_entries = HashSet::default();
+
+                            // Get the set of open buffers from the project to avoid redundant textual checks
+                            let open_entries = project.opened_buffers().iter()
+                                .filter_map(|buffer| buffer.read(cx).file()
+                                    .map(|file| file.path().clone())
+                                )
+                                .collect();
+
                             let candidates = worktree_store.find_search_candidates(
                                 search_query,
                                 limit,
