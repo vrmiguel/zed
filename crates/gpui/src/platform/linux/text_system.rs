@@ -195,44 +195,58 @@ impl CosmicTextSystemState {
         _features: &FontFeatures,
     ) -> Result<SmallVec<[FontId; 4]>> {
         // TODO: Determine the proper system UI font.
-        let name = if name == ".SystemUIFont" {
+        // Handle system font and font fallbacks
+        let primary_name = if name == ".SystemUIFont" {
             "Zed Plex Sans"
         } else {
             name
         };
 
+        let mut names_to_try = vec![primary_name];
+        // Get system fallback fonts based on desktop environment
+        if primary_name != "Zed Plex Sans" {
+            let de = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+            match de.as_str() {
+                "GNOME" => names_to_try.extend(["Cantarell", "Ubuntu"]),
+                "KDE" => names_to_try.extend(["Noto Sans"]),
+                _ => names_to_try.extend(["DejaVu Sans"]),
+            }
+        }
+
         let mut font_ids = SmallVec::new();
-        let families = self
-            .font_system
-            .db()
-            .faces()
-            .filter(|face| face.families.iter().any(|family| *name == family.0))
-            .map(|face| (face.id, face.post_script_name.clone()))
-            .collect::<SmallVec<[_; 4]>>();
-
-        for (font_id, postscript_name) in families {
-            let font = self
+        for name in names_to_try {
+            let families = self
                 .font_system
-                .get_font(font_id)
-                .ok_or_else(|| anyhow!("Could not load font"))?;
+                .db()
+                .faces()
+                .filter(|face| face.families.iter().any(|family| name == family.0))
+                .map(|face| (face.id, face.post_script_name.clone()))
+                .collect::<SmallVec<[_; 4]>>();
 
-            // HACK: To let the storybook run and render Windows caption icons. We should actually do better font fallback.
-            let allowed_bad_font_names = [
-                "SegoeFluentIcons", // NOTE: Segoe fluent icons postscript name is inconsistent
-                "Segoe Fluent Icons",
-            ];
+            for (font_id, postscript_name) in families {
+                let font = self
+                    .font_system
+                    .get_font(font_id)
+                    .ok_or_else(|| anyhow!("Could not load font"))?;
 
-            if font.as_swash().charmap().map('m') == 0
-                && !allowed_bad_font_names.contains(&postscript_name.as_str())
-            {
-                self.font_system.db_mut().remove_face(font.id());
-                continue;
-            };
+                // HACK: To let the storybook run and render Windows caption icons. We should actually do better font fallback.
+                let allowed_bad_font_names = [
+                    "SegoeFluentIcons", // NOTE: Segoe fluent icons postscript name is inconsistent
+                    "Segoe Fluent Icons",
+                ];
 
-            let font_id = FontId(self.loaded_fonts_store.len());
-            font_ids.push(font_id);
-            self.loaded_fonts_store.push(font);
-            self.postscript_names.insert(font_id, postscript_name);
+                if font.as_swash().charmap().map('m') == 0
+                    && !allowed_bad_font_names.contains(&postscript_name.as_str())
+                {
+                    self.font_system.db_mut().remove_face(font.id());
+                    continue;
+                };
+
+                let font_id = FontId(self.loaded_fonts_store.len());
+                font_ids.push(font_id);
+                self.loaded_fonts_store.push(font);
+                self.postscript_names.insert(font_id, postscript_name);
+            }
         }
 
         Ok(font_ids)

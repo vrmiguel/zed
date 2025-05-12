@@ -64,14 +64,7 @@ impl TextSystem {
             wrapper_pool: Mutex::default(),
             font_runs_pool: Mutex::default(),
             fallback_font_stack: smallvec![
-                // TODO: Remove this when Linux have implemented setting fallbacks.
-                font("Zed Plex Mono"),
-                font("Helvetica"),
-                font("Segoe UI"),  // Windows
-                font("Cantarell"), // Gnome
-                font("Ubuntu"),    // Gnome (Ubuntu)
-                font("Noto Sans"), // KDE
-                font("DejaVu Sans")
+                font("Zed Plex Mono")
             ],
         }
     }
