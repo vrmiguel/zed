@@ -29,17 +29,14 @@ impl MarkdownString {
     ///
     /// TODO: There is one escape this doesn't do currently. Period after numbers at the start of the
     /// line (`[0-9]*\.`) should also be escaped to avoid it being interpreted as a list item.
-    pub fn escape(text: &str) -> Self {
+    /// Escape all Markdown special characters for inline content
+    pub fn escape_inline(text: &str) -> Self {
         let mut chunks = Vec::new();
         let mut start_of_unescaped = None;
         for (ix, c) in text.char_indices() {
             match c {
-                // Always escaped.
-                '\\' | '`' | '*' | '_' | '[' | '^' | '$' | '~' | '&' |
-                // TODO: these only need to be escaped when they are the first non-whitespace
-                // character of the line of a block. There should probably be both an `escape_block`
-                // which does this and an `escape_inline` method which does not escape these.
-                '#' | '+' | '=' | '-' => {
+                // Always escaped in inline content
+                '\\' | '`' | '*' | '_' | '[' | '^' | '$' | '~' | '&' => {
                     match start_of_unescaped {
                         None => {}
                         Some(start_of_unescaped) => {
@@ -86,6 +83,105 @@ impl MarkdownString {
             chunks.push(&text[start_of_unescaped..])
         }
         Self(chunks.concat())
+    }
+
+    /// Escape all Markdown special characters for block-level content
+    pub fn escape_block(text: &str) -> Self {
+        let mut chunks = Vec::new();
+        let mut start_of_unescaped = None;
+        let mut is_line_start = true;
+        let mut found_non_whitespace = false;
+
+        for (ix, c) in text.char_indices() {
+            if is_line_start && !c.is_whitespace() {
+                found_non_whitespace = true;
+            }
+
+            match c {
+                // Reset line state on newline
+                '\n' => {
+                    is_line_start = true;
+                    found_non_whitespace = false;
+                    if start_of_unescaped.is_none() {
+                        start_of_unescaped = Some(ix);
+                    }
+                }
+                // Always escaped characters
+                '\\' | '`' | '*' | '_' | '[' | '^' | '$' | '~' | '&' => {
+                    match start_of_unescaped {
+                        None => {}
+                        Some(start_of_unescaped) => {
+                            chunks.push(&text[start_of_unescaped..ix]);
+                        }
+                    }
+                    chunks.push("\\");
+                    start_of_unescaped = Some(ix);
+                }
+                // Characters that need escaping only at start of line
+                '#' | '+' | '=' | '-' => {
+                    if is_line_start && !found_non_whitespace {
+                        match start_of_unescaped {
+                            None => {}
+                            Some(start_of_unescaped) => {
+                                chunks.push(&text[start_of_unescaped..ix]);
+                            }
+                        }
+                        chunks.push("\\");
+                        start_of_unescaped = Some(ix);
+                        found_non_whitespace = true;
+                    } else if start_of_unescaped.is_none() {
+                        start_of_unescaped = Some(ix);
+                    }
+                    is_line_start = false;
+                }
+                // HTML tag and blockquote indicators
+                '<' => {
+                    match start_of_unescaped {
+                        None => {}
+                        Some(start_of_unescaped) => {
+                            chunks.push(&text[start_of_unescaped..ix]);
+                        }
+                    }
+                    chunks.push("&lt;");
+                    start_of_unescaped = None;
+                    is_line_start = false;
+                }
+                '>' => {
+                    match start_of_unescaped {
+                        None => {}
+                        Some(start_of_unescaped) => {
+                            chunks.push(&text[start_of_unescaped..ix]);
+                        }
+                    }
+                    chunks.push("gt;");
+                    start_of_unescaped = None;
+                    is_line_start = false;
+                }
+                // Regular characters
+                _ => {
+                    if c.is_whitespace() {
+                        if start_of_unescaped.is_none() {
+                            start_of_unescaped = Some(ix);
+                        }
+                    } else {
+                        if start_of_unescaped.is_none() {
+                            start_of_unescaped = Some(ix);
+                        }
+                        is_line_start = false;
+                    }
+                }
+            }
+        }
+        if let Some(start_of_unescaped) = start_of_unescaped {
+            chunks.push(&text[start_of_unescaped..])
+        }
+        Self(chunks.concat())
+    }
+
+    /// Deprecation wrapper for backwards compatibility
+    #[deprecated(note = "Use escape_block() or escape_inline() instead")]
+    pub fn escape(text: &str) -> Self {
+        Self::escape_block(text)
     }
 
     /// Returns markdown for inline code (wrapped in backticks), handling code that contains backticks
@@ -162,6 +258,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_markdown_string_escape_block() {
+        let input = "# Heading\n\
+                   Text with #hashtag\n\
+                   - List item\n\
+                   Text with -dash";
+        let expected = "\\# Heading\n\
+                   Text with #hashtag\n\
+                   \\- List item\n\
+                   Text with -dash";
+        assert_eq!(MarkdownString::escape_block(input).0, expected);
+    }
+
+    #[test]
+    fn test_markdown_string_escape_inline() {
+        let input = "Text with #hashtag and -dash and *emphasis*";
+        let expected = "Text with #hashtag and -dash and \\*emphasis\\*";
+        assert_eq!(MarkdownString::escape_inline(input).0, expected);
+    }
+
+    #[test]
+    #[allow(deprecated)]
     fn test_markdown_string_escape() {
         let input = r#"
         # Heading
