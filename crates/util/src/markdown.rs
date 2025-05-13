@@ -30,49 +30,108 @@ impl MarkdownString {
     /// TODO: There is one escape this doesn't do currently. Period after numbers at the start of the
     /// line (`[0-9]*\.`) should also be escaped to avoid it being interpreted as a list item.
     pub fn escape(text: &str) -> Self {
+        Self::escape_block(text)
+    }
+
+    /// Escapes markdown special characters for block-level content, including characters that
+    /// need escaping when they appear at the start of a line.
+    pub fn escape_block(text: &str) -> Self {
         let mut chunks = Vec::new();
         let mut start_of_unescaped = None;
+        let mut at_line_start = true;
+
         for (ix, c) in text.char_indices() {
             match c {
-                // Always escaped.
-                '\\' | '`' | '*' | '_' | '[' | '^' | '$' | '~' | '&' |
-                // TODO: these only need to be escaped when they are the first non-whitespace
-                // character of the line of a block. There should probably be both an `escape_block`
-                // which does this and an `escape_inline` method which does not escape these.
-                '#' | '+' | '=' | '-' => {
-                    match start_of_unescaped {
-                        None => {}
-                        Some(start_of_unescaped) => {
-                            chunks.push(&text[start_of_unescaped..ix]);
-                        }
+                // Always escaped characters
+                '\\' | '`' | '*' | '_' | '[' | '^' | '$' | '~' | '&' => {
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
                     }
                     chunks.push("\\");
-                    // Can include this char in the "unescaped" text since a
-                    // backslash was just emitted.
                     start_of_unescaped = Some(ix);
                 }
-                // Escaped since `<` is used in opening HTML tags. `&lt;` is used since Markdown
-                // supports HTML entities, and this allows the text to be used directly in HTML.
+                // Block-level characters that need escaping at line start
+                '#' | '+' | '=' | '-' if at_line_start => {
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
+                    }
+                    chunks.push("\\");
+                    start_of_unescaped = Some(ix);
+                }
+                // HTML special characters
                 '<' => {
-                    match start_of_unescaped {
-                        None => {}
-                        Some(start_of_unescaped) => {
-                            chunks.push(&text[start_of_unescaped..ix]);
-                        }
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
                     }
                     chunks.push("&lt;");
                     start_of_unescaped = None;
                 }
-                // Escaped since `>` is used for blockquotes. `&gt;` is used since Markdown supports
-                // HTML entities, and this allows the text to be used directly in HTML.
                 '>' => {
-                    match start_of_unescaped {
-                        None => {}
-                        Some(start_of_unescaped) => {
-                            chunks.push(&text[start_of_unescaped..ix]);
-                        }
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
                     }
-                    chunks.push("gt;");
+                    chunks.push("&gt;");
+                    start_of_unescaped = None;
+                }
+                // Line endings reset line start tracking
+                '\n' => {
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..=ix]);
+                    } else {
+                        chunks.push("\n");
+                    }
+                    start_of_unescaped = None;
+                    at_line_start = true;
+                }
+                // Whitespace at line start - just track it
+                ' ' | '\t' if at_line_start => {
+                    if start_of_unescaped.is_none() {
+                        start_of_unescaped = Some(ix);
+                    }
+                }
+                // Any other character
+                _ => {
+                    if start_of_unescaped.is_none() {
+                        start_of_unescaped = Some(ix);
+                    }
+                    at_line_start = false;
+                }
+            }
+        }
+        if let Some(start) = start_of_unescaped {
+            chunks.push(&text[start..]);
+        }
+        Self(chunks.concat())
+    }
+
+    /// Escapes markdown special characters for inline content only, ignoring
+    /// block-level markdown syntax.
+    pub fn escape_inline(text: &str) -> Self {
+        let mut chunks = Vec::new();
+        let mut start_of_unescaped = None;
+
+        for (ix, c) in text.char_indices() {
+            match c {
+                // Only escape inline markdown characters
+                '\\' | '`' | '*' | '_' | '[' | '^' | '$' | '~' | '&' => {
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
+                    }
+                    chunks.push("\\");
+                    start_of_unescaped = Some(ix);
+                }
+                '<' => {
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
+                    }
+                    chunks.push("&lt;");
+                    start_of_unescaped = None;
+                }
+                '>' => {
+                    if let Some(start) = start_of_unescaped {
+                        chunks.push(&text[start..ix]);
+                    }
+                    chunks.push("&gt;");
                     start_of_unescaped = None;
                 }
                 _ => {
@@ -82,8 +141,8 @@ impl MarkdownString {
                 }
             }
         }
-        if let Some(start_of_unescaped) = start_of_unescaped {
-            chunks.push(&text[start_of_unescaped..])
+        if let Some(start) = start_of_unescaped {
+            chunks.push(&text[start..]);
         }
         Self(chunks.concat())
     }
@@ -243,5 +302,12 @@ mod tests {
             3,
             "it can't be downgraded later"
         );
+    }
+
+    #[test]
+    fn test_markdown_string_inline_escape() {
+        let input = "Text with *emphasis* and [link](url) but # not a heading";
+        let expected = "Text with \\*emphasis\\* and \\[link](url) but # not a heading";
+        assert_eq!(MarkdownString::escape_inline(input).0, expected);
     }
 }
