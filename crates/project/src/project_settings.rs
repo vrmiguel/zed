@@ -81,6 +81,9 @@ pub struct NodeBinarySettings {
     /// If disabled, Zed will download its own copy of Node.
     #[serde(default)]
     pub ignore_system_version: Option<bool>,
+    /// If disabled, Zed will not automatically download Node binaries when needed.
+    #[serde(default)]
+    pub disable_binary_download: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
