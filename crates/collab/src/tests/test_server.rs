@@ -204,15 +204,16 @@ impl TestServer {
         let connection_killers = self.connection_killers.clone();
         let forbid_connections = self.forbid_connections.clone();
 
+        let access_token = format!("token-{name}-{}", user_id.0);
         Arc::get_mut(&mut client)
             .unwrap()
             .set_id(user_id.to_proto())
             .override_authenticate(move |cx| {
+                let token = access_token.clone();
                 cx.spawn(|_| async move {
-                    let access_token = "the-token".to_string();
                     Ok(Credentials {
                         user_id: user_id.to_proto(),
-                        access_token,
+                        access_token: token,
                     })
                 })
             })
@@ -221,7 +222,7 @@ impl TestServer {
                     credentials,
                     &Credentials {
                         user_id: user_id.0 as u64,
-                        access_token: "the-token".into()
+                        access_token: access_token.clone()
                     }
                 );
 
