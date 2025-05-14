@@ -209,7 +209,7 @@ impl TestServer {
             .set_id(user_id.to_proto())
             .override_authenticate(move |cx| {
                 cx.spawn(|_| async move {
-                    let access_token = "the-token".to_string();
+                    let access_token = format!("test-token-{}-{}", user_id.0, uuid::Uuid::new_v4());
                     Ok(Credentials {
                         user_id: user_id.to_proto(),
                         access_token,
@@ -217,12 +217,19 @@ impl TestServer {
                 })
             })
             .override_establish_connection(move |credentials, cx| {
+                let token_prefix = format!("test-token-{}-", user_id.0);
+                assert!(
+                    credentials.access_token.starts_with(&token_prefix),
+                    "Token should start with {} but was {}",
+                    token_prefix,
+                    credentials.access_token
+                );
+                assert!(uuid::Uuid::parse_str(&credentials.access_token[token_prefix.len()..]).is_ok(),
+                    "Token suffix should be a valid UUID");
                 assert_eq!(
-                    credentials,
-                    &Credentials {
-                        user_id: user_id.0 as u64,
-                        access_token: "the-token".into()
-                    }
+                    credentials.user_id,
+                    user_id.0 as u64,
+                    "User ID mismatch"
                 );
 
                 let server = server.clone();
