@@ -1,3 +1,13 @@
+// Test file for the 'd g g' (delete to start of document) command in Vim mode
+// Format explanation:
+// {"Put":{"state":"..."}} - Sets up initial editor state with cursor position marked by ˇ
+// {"Key":"..."} - Simulates pressing a key
+// {"Get":{"state":"...","mode":"..."}} - Expected state after keys are pressed
+//
+// This test verifies that deleting to the start of document (d g g) works correctly
+// from different cursor positions within the document. When deleting to start of document,
+// the state should include the text after the cursor position.
+
 {"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
 {"Key":"d"}
 {"Key":"g"}
