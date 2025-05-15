@@ -14,6 +14,20 @@ pub struct BashToolInput {
     command: String,
     /// Working directory for the command. This must be one of the root directories of the project.
     cd: String,
+    /// The shell program to use for execution. Defaults to "bash" if not specified.
+    #[serde(default = "default_shell")]
+    shell: String,
+    /// The shell arguments to use before the command. Defaults to ["-c"] if not specified.
+    #[serde(default = "default_shell_args")]
+    shell_args: Vec<String>,
+}
+
+fn default_shell() -> String {
+    "bash".to_string()
+}
+
+fn default_shell_args() -> Vec<String> {
+    vec!["-c".to_string()]
 }
 
 pub struct BashTool;
@@ -54,13 +68,19 @@ impl Tool for BashTool {
             // Add 2>&1 to merge stderr into stdout for proper interleaving.
             let command = format!("({}) 2>&1", input.command);
 
-            let output = new_smol_command("bash")
-                .arg("-c")
+            let mut cmd = new_smol_command(&input.shell);
+
+            // Add shell arguments
+            for arg in &input.shell_args {
+                cmd.arg(arg);
+            }
+
+            let output = cmd
                 .arg(&command)
                 .current_dir(working_directory)
                 .output()
                 .await
-                .context("Failed to execute bash command")?;
+                .context(format!("Failed to execute shell command with {}", input.shell))?;
 
             let output_string = String::from_utf8_lossy(&output.stdout).to_string();
 
