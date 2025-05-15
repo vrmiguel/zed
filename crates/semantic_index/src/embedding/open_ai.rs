@@ -1,15 +1,35 @@
 use crate::{Embedding, EmbeddingProvider, TextToEmbed};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::{future::BoxFuture, FutureExt};
 use http_client::HttpClient;
 pub use open_ai::OpenAiEmbeddingModel;
 use std::sync::Arc;
 
+#[derive(Clone)]
+struct ApiKey(String);
+
+impl ApiKey {
+    fn new(key: impl Into<String>) -> Result<Self> {
+        let key = key.into();
+        if key.trim().is_empty() {
+            return Err(anyhow!("API key cannot be empty"));
+        }
+        if !key.starts_with("sk-") {
+            return Err(anyhow!("Invalid API key format"));
+        }
+        Ok(Self(key))
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 pub struct OpenAiEmbeddingProvider {
     client: Arc<dyn HttpClient>,
     model: OpenAiEmbeddingModel,
     api_url: String,
-    api_key: String,
+    api_key: ApiKey,
 }
 
 impl OpenAiEmbeddingProvider {
@@ -18,13 +38,14 @@ impl OpenAiEmbeddingProvider {
         model: OpenAiEmbeddingModel,
         api_url: String,
         api_key: String,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let api_key = ApiKey::new(api_key)?;
+        Ok(Self {
             client,
             model,
             api_url,
             api_key,
-        }
+        })
     }
 }
 
@@ -33,7 +54,7 @@ impl EmbeddingProvider for OpenAiEmbeddingProvider {
         let embed = open_ai::embed(
             self.client.as_ref(),
             &self.api_url,
-            &self.api_key,
+            self.api_key.as_str(),
             self.model,
             texts.iter().map(|to_embed| to_embed.text),
         );
