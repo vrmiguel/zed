@@ -5,7 +5,8 @@ services:
     ports:
       - 5432:5432
     environment:
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_USER: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker-compose.sql:/docker-entrypoint-initdb.d/init.sql
@@ -39,7 +40,7 @@ services:
     ports:
       - 8081:8081
     environment:
-      PGRST_DB_URI: postgres://postgres@postgres:5432/zed
+      PGRST_DB_URI: postgres://postgres:postgres_password@postgres:5432/zed
     volumes:
       - ./crates/collab/postgrest_app.conf:/etc/postgrest.conf
     command: postgrest /etc/postgrest.conf
@@ -52,7 +53,7 @@ services:
     ports:
       - 8082:8082
     environment:
-      PGRST_DB_URI: postgres://postgres@postgres:5432/zed_llm
+      PGRST_DB_URI: postgres://postgres:postgres_password@postgres:5432/zed_llm
     volumes:
       - ./crates/collab/postgrest_llm.conf:/etc/postgrest.conf
     command: postgrest /etc/postgrest.conf
