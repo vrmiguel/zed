@@ -1,20 +1,29 @@
-{"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"jumpsˇ over\nthe lazy","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"ˇ","mode":"Normal"}}
-{"Put":{"state":"The qˇuick\nbrown fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"brownˇ fox\njumps over\nthe lazy","mode":"Normal"}}
-{"Put":{"state":"ˇ\nbrown fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"ˇbrown fox\njumps over\nthe lazy","mode":"Normal"}}
+{
+  "// This test file verifies the `d g g` (delete to beginning of document) Vim command behavior": "",
+  "// Each test sequence follows this pattern:": "",
+  "// 1. Put - Sets up an initial document state with a cursor position indicated by 'ˇ'": "",
+  "// 2. Key - First key of the command ('d' for delete)": "",
+  "// 3. Key - Second key ('g') and third key ('g') to move to beginning of document": "",
+  "// 4. Get - Verifies the resulting document state and mode": "",
+  
+  "Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}},
+  {"Key":"d"},
+  {"Key":"g"},
+  {"Key":"g"},
+  {"Get":{"state":"jumpsˇ over\nthe lazy","mode":"Normal"}},
+  {"Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}},
+  {"Key":"d"},
+  {"Key":"g"},
+  {"Key":"g"},
+  {"Get":{"state":"ˇ","mode":"Normal"}},
+  {"Put":{"state":"The qˇuick\nbrown fox\njumps over\nthe lazy"}},
+  {"Key":"d"},
+  {"Key":"g"},
+  {"Key":"g"},
+  {"Get":{"state":"brownˇ fox\njumps over\nthe lazy","mode":"Normal"}},
+  {"Put":{"state":"ˇ\nbrown fox\njumps over\nthe lazy"}},
+  {"Key":"d"},
+  {"Key":"g"},
+  {"Key":"g"},
+  {"Get":{"state":"ˇbrown fox\njumps over\nthe lazy","mode":"Normal"}}
+}

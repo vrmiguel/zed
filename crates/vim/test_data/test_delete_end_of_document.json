@@ -1,16 +1,25 @@
-{"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The qˇuick","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The qˇuick","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The quick\nbrown fox\njumpsˇ over","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrown fox\njumps over\nˇ"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The quick\nbrown fox\nˇjumps over","mode":"Normal"}}
+{
+  "// This test file verifies the `d shift-g` (delete to end of document) Vim command behavior": "",
+  "// Each test sequence follows this pattern:": "",
+  "// 1. Put - Sets up an initial document state with a cursor position indicated by 'ˇ'": "",
+  "// 2. Key - First key of the command ('d' for delete)": "",
+  "// 3. Key - Second key of the command ('shift-g' to move to end of document)": "",
+  "// 4. Get - Verifies the resulting document state and mode": "",
+  
+  "Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}},
+  {"Key":"d"},
+  {"Key":"shift-g"},
+  {"Get":{"state":"The qˇuick","mode":"Normal"}},
+  {"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}},
+  {"Key":"d"},
+  {"Key":"shift-g"},
+  {"Get":{"state":"The qˇuick","mode":"Normal"}},
+  {"Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}},
+  {"Key":"d"},
+  {"Key":"shift-g"},
+  {"Get":{"state":"The quick\nbrown fox\njumpsˇ over","mode":"Normal"}},
+  {"Put":{"state":"The quick\nbrown fox\njumps over\nˇ"}},
+  {"Key":"d"},
+  {"Key":"shift-g"},
+  {"Get":{"state":"The quick\nbrown fox\nˇjumps over","mode":"Normal"}}
+}
