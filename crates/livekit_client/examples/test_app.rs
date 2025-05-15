@@ -70,9 +70,35 @@ fn main() {
             }],
         }]);
 
-        let livekit_url = std::env::var("LIVEKIT_URL").unwrap_or("http://localhost:7880".into());
-        let livekit_key = std::env::var("LIVEKIT_KEY").unwrap_or("devkey".into());
-        let livekit_secret = std::env::var("LIVEKIT_SECRET").unwrap_or("secret".into());
+        let (livekit_url, livekit_key, livekit_secret) = {
+            #[cfg(any(test, feature = "test-support"))] {
+                // Allow default credentials in test/development builds
+                (
+                    std::env::var("LIVEKIT_URL").unwrap_or("http://localhost:7880".into()),
+                    std::env::var("LIVEKIT_KEY").unwrap_or("devkey".into()),
+                    std::env::var("LIVEKIT_SECRET").unwrap_or("secret".into())
+                )
+            }
+            #[cfg(not(any(test, feature = "test-support")))] {
+                // Require valid credentials in production builds
+                let url = std::env::var("LIVEKIT_URL")
+                    .expect("LIVEKIT_URL environment variable must be set");
+                if !url.starts_with("http://") && !url.starts_with("https://") {
+                    panic!("LIVEKIT_URL must start with http:// or https://");
+                }
+                let key = std::env::var("LIVEKIT_KEY")
+                    .expect("LIVEKIT_KEY environment variable must be set");
+                if key.len() < 8 {
+                    panic!("LIVEKIT_KEY must be at least 8 characters long");
+                }
+                let secret = std::env::var("LIVEKIT_SECRET")
+                    .expect("LIVEKIT_SECRET environment variable must be set");
+                if secret.len() < 8 {
+                    panic!("LIVEKIT_SECRET must be at least 8 characters long");
+                }
+                (url, key, secret)
+            }
+        };
         let height = px(800.);
         let width = px(800.);
 
