@@ -21,6 +21,21 @@ pub struct DeletePathToolInput {
     /// You can delete the first file by providing a path of "directory1/a/something.txt"
     /// </example>
     pub path: String,
+
+    /// Whether to move the deleted file to trash instead of permanently deleting it.
+    /// Defaults to true for safety.
+    ///
+    /// <example>
+    /// When set to true, deleted files can be recovered from the trash/recycle bin.
+    /// When set to false, files are permanently deleted.
+    /// </example>
+    #[serde(default = "default_use_trash")]
+    pub use_trash: bool,
+}
+
+/// Default function for the `use_trash` field, returns true for safety.
+fn default_use_trash() -> bool {
+    true
 }
 
 pub struct DeletePathTool;
@@ -47,19 +62,28 @@ impl Tool for DeletePathTool {
         _action_log: Entity<ActionLog>,
         cx: &mut App,
     ) -> Task<Result<String>> {
-        let path_str = match serde_json::from_value::<DeletePathToolInput>(input) {
-            Ok(input) => input.path,
+        let input = match serde_json::from_value::<DeletePathToolInput>(input) {
+            Ok(input) => input,
             Err(err) => return Task::ready(Err(anyhow!(err))),
         };
+
+        let path_str = input.path;
+        let use_trash = input.use_trash;
 
         match project
             .read(cx)
             .find_project_path(&path_str, cx)
-            .and_then(|path| project.update(cx, |project, cx| project.delete_file(path, false, cx)))
+            .and_then(|path| project.update(cx, |project, cx| project.delete_file(path, use_trash, cx)))
         {
             Some(deletion_task) => cx.background_spawn(async move {
                 match deletion_task.await {
-                    Ok(()) => Ok(format!("Deleted {}", &path_str)),
+                    Ok(()) => {
+                        if use_trash {
+                            Ok(format!("Moved {} to trash", &path_str))
+                        } else {
+                            Ok(format!("Permanently deleted {}", &path_str))
+                        }
+                    },
                     Err(err) => Err(anyhow!("Failed to delete {}: {}", &path_str, err)),
                 }
             }),
