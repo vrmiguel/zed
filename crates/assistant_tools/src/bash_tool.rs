@@ -10,17 +10,31 @@ use util::command::new_smol_command;
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct BashToolInput {
-    /// The bash command to execute as a one-liner.
+    /// The command to execute as a one-liner.
     command: String,
     /// Working directory for the command. This must be one of the root directories of the project.
     cd: String,
+    /// Shell to use for executing the command. Defaults to "bash" if not specified.
+    #[serde(default = "default_shell")]
+    shell: String,
+    /// Shell argument for command execution. Defaults to "-c" if not specified.
+    #[serde(default = "default_shell_arg")]
+    shell_arg: String,
+}
+
+fn default_shell() -> String {
+    "bash".to_string()
+}
+
+fn default_shell_arg() -> String {
+    "-c".to_string()
 }
 
 pub struct BashTool;
 
 impl Tool for BashTool {
     fn name(&self) -> String {
-        "bash".to_string()
+        "shell".to_string()
     }
 
     fn description(&self) -> String {
@@ -54,13 +68,13 @@ impl Tool for BashTool {
             // Add 2>&1 to merge stderr into stdout for proper interleaving.
             let command = format!("({}) 2>&1", input.command);
 
-            let output = new_smol_command("bash")
-                .arg("-c")
+            let output = new_smol_command(&input.shell)
+                .arg(&input.shell_arg)
                 .arg(&command)
                 .current_dir(working_directory)
                 .output()
                 .await
-                .context("Failed to execute bash command")?;
+                .context(format!("Failed to execute {} command", input.shell))?;
 
             let output_string = String::from_utf8_lossy(&output.stdout).to_string();
 
@@ -72,7 +86,8 @@ impl Tool for BashTool {
                 }
             } else {
                 Ok(format!(
-                    "Command failed with exit code {}\n{}",
+                    "{} command failed with exit code {}\n{}",
+                    input.shell,
                     output.status.code().unwrap_or(-1),
                     &output_string
                 ))
