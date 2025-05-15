@@ -5,6 +5,6 @@ rtc:
   tcp_port: 7881
   use_external_ip: false
 keys:
-  devkey: secret
+  devkey: ${LIVEKIT_DEV_KEY}
 logging:
   level: debug
