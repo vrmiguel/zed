@@ -14,6 +14,7 @@ use html_to_markdown::{convert_html_to_markdown, markdown, TagHandler};
 use http_client::{AsyncBody, HttpClient, HttpClientWithUrl};
 use language::{BufferSnapshot, LspAdapterDelegate};
 use ui::prelude::*;
+use url::Url;
 use workspace::Workspace;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
@@ -26,13 +27,45 @@ enum ContentType {
 pub struct FetchSlashCommand;
 
 impl FetchSlashCommand {
-    async fn build_message(http_client: Arc<HttpClientWithUrl>, url: &str) -> Result<String> {
-        let mut url = url.to_owned();
-        if !url.starts_with("https://") && !url.starts_with("http://") {
-            url = format!("https://{url}");
+    /// Validates and normalizes a URL string
+    fn validate_url(input: &str) -> Result<String> {
+        // Try to parse as is first
+        let parsed_url = Url::parse(input);
+
+        // If the URL is valid as-is, return it
+        if let Ok(url) = parsed_url {
+            // Only allow http and https schemes for security
+            if url.scheme() == "http" || url.scheme() == "https" {
+                return Ok(url.to_string());
+            } else {
+                bail!("Only http:// and https:// URLs are supported");
+            }
         }
 
-        let mut response = http_client.get(&url, AsyncBody::default(), true).await?;
+        // Try with https:// prefix if the original parsing failed
+        if !input.starts_with("https://") && !input.starts_with("http://") {
+            let with_https = format!("https://{input}");
+            match Url::parse(&with_https) {
+                Ok(url) => {
+                    // Verify the URL has a valid host
+                    if url.host().is_some() {
+                        return Ok(url.to_string());
+                    }
+                    bail!("Invalid URL: Missing host");
+                }
+                Err(e) => bail!("Invalid URL: {}", e),
+            }
+        } else {
+            // If it already had a scheme but failed to parse, it's invalid
+            bail!("Invalid URL format: {}", input);
+        }
+    }
+
+    async fn build_message(http_client: Arc<HttpClientWithUrl>, url: &str) -> Result<String> {
+        // Validate and normalize the URL
+        let validated_url = Self::validate_url(url)?;
+
+        let mut response = http_client.get(&validated_url, AsyncBody::default(), true).await?;
 
         let mut body = Vec::new();
         response
@@ -72,7 +105,15 @@ impl FetchSlashCommand {
                     Rc::new(RefCell::new(markdown::TableHandler::new())),
                     Rc::new(RefCell::new(markdown::StyledTextHandler)),
                 ];
-                if url.contains("wikipedia.org") {
+
+                // Safely check for Wikipedia domain using the URL parser
+                let is_wikipedia = Url::parse(&validated_url)
+                    .ok()
+                    .and_then(|url| url.host_str())
+                    .map(|host| host.ends_with("wikipedia.org"))
+                    .unwrap_or(false);
+
+                if is_wikipedia {
                     use html_to_markdown::structure::wikipedia;
 
                     handlers.push(Rc::new(RefCell::new(wikipedia::WikipediaChromeRemover)));
@@ -149,14 +190,20 @@ impl SlashCommand for FetchSlashCommand {
         };
 
         let http_client = workspace.read(cx).client().http_client();
-        let url = argument.to_string();
+        let input_url = argument.to_string();
+
+        // Validate URL early to catch errors before background processing
+        let validated_url = match Self::validate_url(&input_url) {
+            Ok(url) => url,
+            Err(e) => return Task::ready(Err(e)),
+        };
+
+        let display_url = SharedString::from(validated_url.clone());
 
         let text = cx.background_spawn({
-            let url = url.clone();
-            async move { Self::build_message(http_client, &url).await }
+            async move { Self::build_message(http_client, &validated_url).await }
         });
 
-        let url = SharedString::from(url);
         cx.foreground_executor().spawn(async move {
             let text = text.await?;
             if text.trim().is_empty() {
@@ -169,7 +216,7 @@ impl SlashCommand for FetchSlashCommand {
                 sections: vec![SlashCommandOutputSection {
                     range,
                     icon: IconName::Globe,
-                    label: format!("fetch {}", url).into(),
+                    label: format!("fetch {}", display_url).into(),
                     metadata: None,
                 }],
                 run_commands_in_text: false,
