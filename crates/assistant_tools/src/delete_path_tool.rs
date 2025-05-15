@@ -21,6 +21,24 @@ pub struct DeletePathToolInput {
     /// You can delete the first file by providing a path of "directory1/a/something.txt"
     /// </example>
     pub path: String,
+
+    /// Whether to move the file to trash instead of permanently deleting it.
+    /// Defaults to true for safety.
+    #[serde(default = "default_use_trash")]
+    pub use_trash: bool,
+
+    /// Whether to require confirmation before deletion.
+    /// Defaults to true for safety.
+    #[serde(default = "default_require_confirmation")]
+    pub require_confirmation: bool,
+}
+
+fn default_use_trash() -> bool {
+    true
+}
+
+fn default_require_confirmation() -> bool {
+    true
 }
 
 pub struct DeletePathTool;
@@ -47,15 +65,27 @@ impl Tool for DeletePathTool {
         _action_log: Entity<ActionLog>,
         cx: &mut App,
     ) -> Task<Result<String>> {
-        let path_str = match serde_json::from_value::<DeletePathToolInput>(input) {
-            Ok(input) => input.path,
+        let input = match serde_json::from_value::<DeletePathToolInput>(input) {
+            Ok(input) => input,
             Err(err) => return Task::ready(Err(anyhow!(err))),
         };
+
+        let path_str = input.path;
+        let use_trash = input.use_trash;
+        let require_confirmation = input.require_confirmation;
+
+        // If confirmation is required, we don't proceed with deletion
+        if require_confirmation {
+            return Task::ready(Ok(format!(
+                "Confirmation required to delete {}. Set 'require_confirmation: false' to proceed with deletion.",
+                &path_str
+            )));
+        }
 
         match project
             .read(cx)
             .find_project_path(&path_str, cx)
-            .and_then(|path| project.update(cx, |project, cx| project.delete_file(path, false, cx)))
+            .and_then(|path| project.update(cx, |project, cx| project.delete_file(path, use_trash, cx)))
         {
             Some(deletion_task) => cx.background_spawn(async move {
                 match deletion_task.await {
