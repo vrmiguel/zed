@@ -1,20 +1,35 @@
-{"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"jumpsˇ over\nthe lazy","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"ˇ","mode":"Normal"}}
-{"Put":{"state":"The qˇuick\nbrown fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
-{"Get":{"state":"brownˇ fox\njumps over\nthe lazy","mode":"Normal"}}
-{"Put":{"state":"ˇ\nbrown fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"g"}
-{"Key":"g"}
+{
+  "_comment": "Test 1: Delete from middle of line to start of document",
+  "Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}
+},
+{"Key":"d"},
+{"Key":"g"},
+{"Key":"g"},
+{"Get":{"state":"jumpsˇ over\nthe lazy","mode":"Normal"}},
+
+{
+  "_comment": "Test 2: Delete from end of line to start of document",
+  "Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}
+},
+{"Key":"d"},
+{"Key":"g"},
+{"Key":"g"},
+{"Get":{"state":"ˇ","mode":"Normal"}},
+
+{
+  "_comment": "Test 3: Delete from start of line to start of document",
+  "Put":{"state":"The qˇuick\nbrown fox\njumps over\nthe lazy"}
+},
+{"Key":"d"},
+{"Key":"g"},
+{"Key":"g"},
+{"Get":{"state":"brownˇ fox\njumps over\nthe lazy","mode":"Normal"}},
+
+{
+  "_comment": "Test 4: Delete from start of file (where nothing should change)",
+  "Put":{"state":"ˇ\nbrown fox\njumps over\nthe lazy"}
+},
+{"Key":"d"},
+{"Key":"g"},
+{"Key":"g"},
 {"Get":{"state":"ˇbrown fox\njumps over\nthe lazy","mode":"Normal"}}

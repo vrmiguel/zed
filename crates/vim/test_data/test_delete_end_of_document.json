@@ -1,16 +1,31 @@
-{"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The qˇuick","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The qˇuick","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}}
-{"Key":"d"}
-{"Key":"shift-g"}
-{"Get":{"state":"The quick\nbrown fox\njumpsˇ over","mode":"Normal"}}
-{"Put":{"state":"The quick\nbrown fox\njumps over\nˇ"}}
-{"Key":"d"}
-{"Key":"shift-g"}
+{
+  "_comment": "Test 1: Delete from middle of line to end of document",
+  "Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}
+},
+{"Key":"d"},
+{"Key":"shift-g"},
+{"Get":{"state":"The qˇuick","mode":"Normal"}},
+
+{
+  "_comment": "Test 2: Repeated test to confirm consistent behavior",
+  "Put":{"state":"The quick\nbrownˇ fox\njumps over\nthe lazy"}
+},
+{"Key":"d"},
+{"Key":"shift-g"},
+{"Get":{"state":"The qˇuick","mode":"Normal"}},
+
+{
+  "_comment": "Test 3: Delete from end of line to end of document",
+  "Put":{"state":"The quick\nbrown fox\njumps over\nthe lˇazy"}
+},
+{"Key":"d"},
+{"Key":"shift-g"},
+{"Get":{"state":"The quick\nbrown fox\njumpsˇ over","mode":"Normal"}},
+
+{
+  "_comment": "Test 4: Delete from end of file (where cursor moves to previous line)",
+  "Put":{"state":"The quick\nbrown fox\njumps over\nˇ"}
+},
+{"Key":"d"},
+{"Key":"shift-g"},
 {"Get":{"state":"The quick\nbrown fox\nˇjumps over","mode":"Normal"}}
