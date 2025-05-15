@@ -1,14 +1,14 @@
 use std::{
-    alloc,
+    alloc::{self, Layout},
     cell::Cell,
     ops::{Deref, DerefMut},
-    ptr,
+    ptr::{self, NonNull},
     rc::Rc,
 };
 
 struct ArenaElement {
-    value: *mut u8,
-    drop: unsafe fn(*mut u8),
+    value: NonNull<u8>,
+    drop: unsafe fn(NonNull<u8>),
 }
 
 impl Drop for ArenaElement {
@@ -21,35 +21,39 @@ impl Drop for ArenaElement {
 }
 
 pub struct Arena {
-    start: *mut u8,
-    end: *mut u8,
-    offset: *mut u8,
+    start: NonNull<u8>,
+    end: NonNull<u8>,
+    offset: NonNull<u8>,
     elements: Vec<ArenaElement>,
     valid: Rc<Cell<bool>>,
+    layout: Layout,
 }
 
 impl Arena {
-    pub fn new(size_in_bytes: usize) -> Self {
+    pub fn new(size_in_bytes: usize) -> Result<Self, alloc::LayoutError> {
         unsafe {
-            let layout = alloc::Layout::from_size_align(size_in_bytes, 1).unwrap();
-            let start = alloc::alloc(layout);
-            let end = start.add(size_in_bytes);
-            Self {
+            let layout = Layout::from_size_align(size_in_bytes, std::mem::align_of::<usize>())?;
+            let start = NonNull::new(alloc::alloc(layout))
+                .ok_or(alloc::LayoutError)?;
+            let end = NonNull::new(start.as_ptr().add(size_in_bytes))
+                .ok_or(alloc::LayoutError)?;
+            Ok(Self {
                 start,
                 end,
                 offset: start,
                 elements: Vec::new(),
                 valid: Rc::new(Cell::new(true)),
-            }
+                layout,
+            })
         }
     }
 
     pub fn len(&self) -> usize {
-        self.offset as usize - self.start as usize
+        unsafe { self.offset.as_ptr().offset_from(self.start.as_ptr()) as usize }
     }
 
     pub fn capacity(&self) -> usize {
-        self.end as usize - self.start as usize
+        unsafe { self.end.as_ptr().offset_from(self.start.as_ptr()) as usize }
     }
 
     pub fn clear(&mut self) {
@@ -60,58 +64,72 @@ impl Arena {
     }
 
     #[inline(always)]
-    pub fn alloc<T>(&mut self, f: impl FnOnce() -> T) -> ArenaBox<T> {
+    pub fn alloc<T>(&mut self, f: impl FnOnce() -> T) -> Result<ArenaBox<T>, &'static str> {
         #[inline(always)]
-        unsafe fn inner_writer<T, F>(ptr: *mut T, f: F)
+        unsafe fn inner_writer<T, F>(ptr: NonNull<T>, f: F)
         where
             F: FnOnce() -> T,
         {
-            ptr::write(ptr, f());
+            ptr::write(ptr.as_ptr(), f());
         }
 
-        unsafe fn drop<T>(ptr: *mut u8) {
-            std::ptr::drop_in_place(ptr.cast::<T>());
+        unsafe fn drop<T>(ptr: NonNull<u8>) {
+            ptr::drop_in_place(ptr.cast::<T>().as_ptr());
         }
 
         unsafe {
-            let layout = alloc::Layout::new::<T>();
-            let offset = self.offset.add(self.offset.align_offset(layout.align()));
-            let next_offset = offset.add(layout.size());
-            assert!(next_offset <= self.end, "not enough space in Arena");
+            let layout = Layout::new::<T>();
+            let aligned_offset = self.offset.as_ptr().add(
+                self.offset.as_ptr().align_offset(layout.align())
+            );
+            let offset = NonNull::new(aligned_offset)
+                .ok_or("alignment calculation overflow")?;
+            let next_offset = NonNull::new(offset.as_ptr().add(layout.size()))
+                .ok_or("allocation size overflow")?;
+            
+            if next_offset.as_ptr() > self.end.as_ptr() {
+                return Err("not enough space in Arena");
+            }
 
+            let ptr = NonNull::new(offset.as_ptr() as *mut T)
+                .ok_or("pointer cast failed")?;
             let result = ArenaBox {
-                ptr: offset.cast(),
+                ptr,
                 valid: self.valid.clone(),
             };
 
-            inner_writer(result.ptr, f);
+            inner_writer(ptr, f);
             self.elements.push(ArenaElement {
                 value: offset,
                 drop: drop::<T>,
             });
             self.offset = next_offset;
 
-            result
+            Ok(result)
         }
     }
 }
 
 impl Drop for Arena {
     fn drop(&mut self) {
-        self.clear();
+        unsafe {
+            self.clear();
+            alloc::dealloc(self.start.as_ptr(), self.layout);
+        }
     }
 }
 
 pub struct ArenaBox<T: ?Sized> {
-    ptr: *mut T,
+    ptr: NonNull<T>,
     valid: Rc<Cell<bool>>,
 }
 
 impl<T: ?Sized> ArenaBox<T> {
     #[inline(always)]
     pub fn map<U: ?Sized>(mut self, f: impl FnOnce(&mut T) -> &mut U) -> ArenaBox<U> {
+        let ptr = NonNull::from(f(&mut self));
         ArenaBox {
-            ptr: f(&mut self),
+            ptr,
             valid: self.valid,
         }
     }
@@ -131,7 +149,7 @@ impl<T: ?Sized> Deref for ArenaBox<T> {
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
         self.validate();
-        unsafe { &*self.ptr }
+        unsafe { self.ptr.as_ref() }
     }
 }
 
@@ -139,7 +157,7 @@ impl<T: ?Sized> DerefMut for ArenaBox<T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.validate();
-        unsafe { &mut *self.ptr }
+        unsafe { self.ptr.as_mut() }
     }
 }
 
@@ -172,32 +190,30 @@ impl<T: ?Sized> Deref for ArenaRef<T> {
 #[cfg(test)]
 mod tests {
     use std::{cell::Cell, rc::Rc};
-
     use super::*;
 
     #[test]
     fn test_arena() {
-        let mut arena = Arena::new(1024);
-        let a = arena.alloc(|| 1u64);
-        let b = arena.alloc(|| 2u32);
-        let c = arena.alloc(|| 3u16);
-        let d = arena.alloc(|| 4u8);
+        let mut arena = Arena::new(1024).unwrap();
+        let a = arena.alloc(|| 1u64).unwrap();
+        let b = arena.alloc(|| 2u32).unwrap();
+        let c = arena.alloc(|| 3u16).unwrap();
+        let d = arena.alloc(|| 4u8).unwrap();
         assert_eq!(*a, 1);
         assert_eq!(*b, 2);
         assert_eq!(*c, 3);
         assert_eq!(*d, 4);
 
         arena.clear();
-        let a = arena.alloc(|| 5u64);
-        let b = arena.alloc(|| 6u32);
-        let c = arena.alloc(|| 7u16);
-        let d = arena.alloc(|| 8u8);
+        let a = arena.alloc(|| 5u64).unwrap();
+        let b = arena.alloc(|| 6u32).unwrap();
+        let c = arena.alloc(|| 7u16).unwrap();
+        let d = arena.alloc(|| 8u8).unwrap();
         assert_eq!(*a, 5);
         assert_eq!(*b, 6);
         assert_eq!(*c, 7);
         assert_eq!(*d, 8);
 
-        // Ensure drop gets called.
         let dropped = Rc::new(Cell::new(false));
         struct DropGuard(Rc<Cell<bool>>);
         impl Drop for DropGuard {
@@ -205,29 +221,27 @@ mod tests {
                 self.0.set(true);
             }
         }
-        arena.alloc(|| DropGuard(dropped.clone()));
+        arena.alloc(|| DropGuard(dropped.clone())).unwrap();
         arena.clear();
         assert!(dropped.get());
     }
 
     #[test]
-    #[should_panic(expected = "not enough space in Arena")]
     fn test_arena_overflow() {
-        let mut arena = Arena::new(16);
-        arena.alloc(|| 1u64);
-        arena.alloc(|| 2u64);
-        // This should panic.
-        arena.alloc(|| 3u64);
+        let mut arena = Arena::new(16).unwrap();
+        arena.alloc(|| 1u64).unwrap();
+        arena.alloc(|| 2u64).unwrap();
+        assert!(arena.alloc(|| 3u64).is_err());
     }
 
     #[test]
     fn test_arena_alignment() {
-        let mut arena = Arena::new(256);
-        let x1 = arena.alloc(|| 1u8);
-        let x2 = arena.alloc(|| 2u16);
-        let x3 = arena.alloc(|| 3u32);
-        let x4 = arena.alloc(|| 4u64);
-        let x5 = arena.alloc(|| 5u64);
+        let mut arena = Arena::new(256).unwrap();
+        let x1 = arena.alloc(|| 1u8).unwrap();
+        let x2 = arena.alloc(|| 2u16).unwrap();
+        let x3 = arena.alloc(|| 3u32).unwrap();
+        let x4 = arena.alloc(|| 4u64).unwrap();
+        let x5 = arena.alloc(|| 5u64).unwrap();
 
         assert_eq!(*x1, 1);
         assert_eq!(*x2, 2);
@@ -235,15 +249,17 @@ mod tests {
         assert_eq!(*x4, 4);
         assert_eq!(*x5, 5);
 
-        assert_eq!(x1.ptr.align_offset(std::mem::align_of_val(&*x1)), 0);
-        assert_eq!(x2.ptr.align_offset(std::mem::align_of_val(&*x2)), 0);
+        unsafe {
+            assert_eq!(x1.ptr.as_ptr().align_offset(std::mem::align_of_val(&*x1)), 0);
+            assert_eq!(x2.ptr.as_ptr().align_offset(std::mem::align_of_val(&*x2)), 0);
+        }
     }
 
     #[test]
     #[should_panic(expected = "attempted to dereference an ArenaRef after its Arena was cleared")]
     fn test_arena_use_after_clear() {
-        let mut arena = Arena::new(16);
-        let value = arena.alloc(|| 1u64);
+        let mut arena = Arena::new(16).unwrap();
+        let value = arena.alloc(|| 1u64).unwrap();
 
         arena.clear();
         let _read_value = *value;
