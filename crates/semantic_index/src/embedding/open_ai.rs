@@ -1,15 +1,17 @@
 use crate::{Embedding, EmbeddingProvider, TextToEmbed};
-use anyhow::Result;
+use anyhow::{Result, Context};
 use futures::{future::BoxFuture, FutureExt};
 use http_client::HttpClient;
 pub use open_ai::OpenAiEmbeddingModel;
-use std::sync::Arc;
+use std::{env, sync::Arc};
+
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 
 pub struct OpenAiEmbeddingProvider {
     client: Arc<dyn HttpClient>,
     model: OpenAiEmbeddingModel,
     api_url: String,
-    api_key: String,
+    api_key: Arc<String>,
 }
 
 impl OpenAiEmbeddingProvider {
@@ -17,14 +19,20 @@ impl OpenAiEmbeddingProvider {
         client: Arc<dyn HttpClient>,
         model: OpenAiEmbeddingModel,
         api_url: String,
-        api_key: String,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let api_key = env::var(OPENAI_API_KEY_ENV)
+            .with_context(|| format!("Missing environment variable: {}", OPENAI_API_KEY_ENV))?;
+        
+        if api_key.trim().is_empty() {
+            anyhow::bail!("OpenAI API key cannot be empty");
+        }
+        
+        Ok(Self {
             client,
             model,
             api_url,
-            api_key,
-        }
+            api_key: Arc::new(api_key),
+        })
     }
 }
 
@@ -33,12 +41,12 @@ impl EmbeddingProvider for OpenAiEmbeddingProvider {
         let embed = open_ai::embed(
             self.client.as_ref(),
             &self.api_url,
-            &self.api_key,
+            self.api_key.as_ref(),
             self.model,
             texts.iter().map(|to_embed| to_embed.text),
         );
         async move {
-            let response = embed.await?;
+            let response = embed.await.with_context(|| "Failed to generate embeddings with OpenAI API")?;
             Ok(response
                 .data
                 .into_iter()
