@@ -754,8 +754,12 @@ impl ChannelMessage {
             sender,
             nonce: message
                 .nonce
-                .ok_or_else(|| anyhow!("nonce is required"))?
-                .into(),
+                .map(|n| n.into())
+                .unwrap_or_else(|| {
+                    // Generate a new random nonce if one wasn't provided
+                    let mut rng = StdRng::from_entropy();
+                    rng.gen()
+                }),
             reply_to_message_id: message.reply_to_message_id,
             edited_at,
         })
