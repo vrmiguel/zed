@@ -11,6 +11,8 @@ use gpui::{App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, Task, 
 use rand::prelude::*;
 use rpc::AnyProtoClient;
 use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
     ops::{ControlFlow, Range},
     sync::Arc,
 };
@@ -739,6 +741,19 @@ impl ChannelMessage {
             None
         });
 
+        // Generate a random nonce if none is provided
+        let nonce = match message.nonce {
+            Some(n) => n.into(),
+            None => {
+                // Use message id and timestamp to create a deterministic but unique nonce
+                let mut hasher = DefaultHasher::new();
+                message.id.hash(&mut hasher);
+                message.timestamp.hash(&mut hasher);
+                message.sender_id.hash(&mut hasher);
+                hasher.finish() as u128
+            }
+        };
+
         Ok(ChannelMessage {
             id: ChannelMessageId::Saved(message.id),
             body: message.body,
@@ -752,10 +767,7 @@ impl ChannelMessage {
                 .collect(),
             timestamp: OffsetDateTime::from_unix_timestamp(message.timestamp as i64)?,
             sender,
-            nonce: message
-                .nonce
-                .ok_or_else(|| anyhow!("nonce is required"))?
-                .into(),
+            nonce,
             reply_to_message_id: message.reply_to_message_id,
             edited_at,
         })
