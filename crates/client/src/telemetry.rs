@@ -111,64 +111,129 @@ pub fn os_name() -> String {
 pub fn os_version() -> String {
     #[cfg(target_os = "macos")]
     {
-        use cocoa::base::nil;
-        use cocoa::foundation::NSProcessInfo;
-
-        unsafe {
-            let process_info = cocoa::foundation::NSProcessInfo::processInfo(nil);
-            let version = process_info.operatingSystemVersion();
-            gpui::SemanticVersion::new(
-                version.majorVersion as usize,
-                version.minorVersion as usize,
-                version.patchVersion as usize,
-            )
-            .to_string()
-        }
+        macos_version().unwrap_or_else(|err| {
+            log::error!("Failed to detect macOS version: {}", err);
+            "unknown".to_string()
+        })
     }
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     {
-        use std::path::Path;
-
-        let content = if let Ok(file) = std::fs::read_to_string(&Path::new("/etc/os-release")) {
-            file
-        } else if let Ok(file) = std::fs::read_to_string(&Path::new("/usr/lib/os-release")) {
-            file
-        } else {
-            log::error!("Failed to load /etc/os-release, /usr/lib/os-release");
-            "".to_string()
-        };
-        let mut name = "unknown".to_string();
-        let mut version = "unknown".to_string();
-
-        for line in content.lines() {
-            if line.starts_with("ID=") {
-                name = line.trim_start_matches("ID=").trim_matches('"').to_string();
-            }
-            if line.starts_with("VERSION_ID=") {
-                version = line
-                    .trim_start_matches("VERSION_ID=")
-                    .trim_matches('"')
-                    .to_string();
-            }
-        }
-
-        format!("{} {}", name, version)
+        linux_version().unwrap_or_else(|err| {
+            log::error!("Failed to detect Linux version: {}", err);
+            "unknown".to_string()
+        })
     }
-
     #[cfg(target_os = "windows")]
     {
-        let mut info = unsafe { std::mem::zeroed() };
-        let status = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut info) };
-        if status.is_ok() {
-            gpui::SemanticVersion::new(
-                info.dwMajorVersion as _,
-                info.dwMinorVersion as _,
-                info.dwBuildNumber as _,
-            )
-            .to_string()
-        } else {
+        windows_version().unwrap_or_else(|err| {
+            log::error!("Failed to detect Windows version: {}", err);
             "unknown".to_string()
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_version() -> Result<String, anyhow::Error> {
+    use cocoa::base::nil;
+    use cocoa::foundation::NSProcessInfo;
+
+    // Safety: NSProcessInfo::processInfo() is a well-defined API that doesn't mutate its arguments.
+    // The method returns a valid NSProcessInfo reference which we immediately use for obtaining the OS version.
+    // The nil parameter is standard for this API call.
+    let version = unsafe {
+        let process_info = NSProcessInfo::processInfo(nil);
+        if process_info.is_null() {
+            return Err(anyhow::anyhow!("Failed to get NSProcessInfo, null pointer returned"));
         }
+        process_info.operatingSystemVersion()
+    };
+
+    // Ensure version numbers are reasonable before creating a SemanticVersion
+    if version.majorVersion < 0 || version.minorVersion < 0 || version.patchVersion < 0 {
+        return Err(anyhow::anyhow!("Invalid version components: {}.{}.{}",
+            version.majorVersion, version.minorVersion, version.patchVersion));
+    }
+
+    Ok(gpui::SemanticVersion::new(
+        version.majorVersion as usize,
+        version.minorVersion as usize,
+        version.patchVersion as usize,
+    ).to_string())
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn linux_version() -> Result<String, anyhow::Error> {
+    use std::path::Path;
+
+    // Try to read from the standard locations for os-release
+    let os_release_paths = ["/etc/os-release", "/usr/lib/os-release"];
+    let content = os_release_paths
+        .iter()
+        .find_map(|path| std::fs::read_to_string(Path::new(path)).ok())
+        .ok_or_else(|| anyhow::anyhow!("Could not read any os-release file"))?;
+
+    let mut name = "unknown".to_string();
+    let mut version = "unknown".to_string();
+
+    for line in content.lines() {
+        if line.starts_with("ID=") {
+            name = line.trim_start_matches("ID=").trim_matches('"').to_string();
+        }
+        if line.starts_with("VERSION_ID=") {
+            version = line
+                .trim_start_matches("VERSION_ID=")
+                .trim_matches('"')
+                .to_string();
+        }
+    }
+
+    Ok(format!("{} {}", name, version))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_version() -> Result<String, anyhow::Error> {
+    use windows::Wdk::System::SystemServices;
+    use windows::core::NTSTATUS;
+
+    // Define a safe abstraction for RTL_OSVERSIONINFOW
+    #[allow(non_snake_case)]
+    #[repr(C)]
+    struct OsVersionInfo {
+        dwOSVersionInfoSize: u32,
+        dwMajorVersion: u32,
+        dwMinorVersion: u32,
+        dwBuildNumber: u32,
+        dwPlatformId: u32,
+        szCSDVersion: [u16; 128],
+    }
+
+    // Initialize the version info struct with the correct size
+    let mut info = OsVersionInfo {
+        dwOSVersionInfoSize: std::mem::size_of::<OsVersionInfo>() as u32,
+        dwMajorVersion: 0,
+        dwMinorVersion: 0,
+        dwBuildNumber: 0,
+        dwPlatformId: 0,
+        szCSDVersion: [0; 128],
+    };
+
+    // Safety: RtlGetVersion is a stable Win32 API. We pass a correctly initialized struct
+    // with the proper size set, and the API guarantees to only write to this struct.
+    // The struct is properly aligned and its memory is valid for the duration of the call.
+    let status: NTSTATUS = unsafe {
+        SystemServices::RtlGetVersion(
+            std::mem::transmute(&mut info)
+        )
+    };
+
+    if status.is_ok() {
+        Ok(gpui::SemanticVersion::new(
+            info.dwMajorVersion as usize,
+            info.dwMinorVersion as usize,
+            info.dwBuildNumber as usize
+        ).to_string())
+    } else {
+        Err(anyhow::anyhow!("RtlGetVersion failed with status: {:?}", status))
     }
 }
 
