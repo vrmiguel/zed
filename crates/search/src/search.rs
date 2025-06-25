@@ -4,12 +4,14 @@ use editor::SearchSettings;
 use gpui::{actions, Action, App, FocusHandle, IntoElement};
 use project::search::SearchQuery;
 pub use project_search::ProjectSearchView;
+pub use mode::SearchMode;
 use ui::{prelude::*, Tooltip};
 use ui::{ButtonStyle, IconButton, IconButtonShape};
 use workspace::notifications::NotificationId;
 use workspace::{Toast, Workspace};
 
 pub mod buffer_search;
+pub mod mode;
 pub mod project_search;
 pub(crate) mod search_bar;
 
@@ -22,6 +24,8 @@ pub fn init(cx: &mut App) {
 actions!(
     search,
     [
+        ActivateTextMode,
+        ActivateRegexMode,
         FocusSearch,
         ToggleWholeWord,
         ToggleCaseSensitive,

@@ -1,16 +1,40 @@
-use gpui::{Action, SharedString};
+use gpui::{Action, AppContext, SharedString};
+use settings::Settings;
+use editor::EditorSettings;
 
 use crate::{ActivateRegexMode, ActivateTextMode};
 
-// TODO: Update the default search mode to get from config
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+// Getting default from editor settings
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SearchMode {
-    #[default]
     Text,
     Regex,
 }
 
+impl Default for SearchMode {
+    fn default() -> Self {
+        // When no context is available, default to Text mode
+        SearchMode::Text
+    }
+}
+
 impl SearchMode {
+    /// Get the default search mode from the current editor settings
+    pub fn default_for_context(cx: &AppContext) -> Self {
+        // Get search settings from editor settings
+        if let Ok(editor_settings) = EditorSettings::get(cx) {
+            if editor_settings.search.regex {
+                return SearchMode::Regex;
+            }
+        }
+        SearchMode::Text
+    }
+    
+    /// Create a new search mode based on settings in the current context
+    pub fn new_from_settings(cx: &AppContext) -> Self {
+        Self::default_for_context(cx)
+    }
+
     pub(crate) fn label(&self) -> &'static str {
         match self {
             SearchMode::Text => "Text",
