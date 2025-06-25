@@ -3,8 +3,6 @@ use settings::Settings;
 use editor::EditorSettings;
 
 use crate::{ActivateRegexMode, ActivateTextMode};
-
-// Getting default from editor settings
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SearchMode {
     Text,
