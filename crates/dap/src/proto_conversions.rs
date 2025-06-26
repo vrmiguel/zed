@@ -103,8 +103,8 @@ impl ProtoConversion for dap_types::Variable {
             named_variables: payload.named_variables,
             indexed_variables: payload.indexed_variables,
             memory_reference: payload.memory_reference,
-            declaration_location_reference: None, // TODO
-            value_location_reference: None,       // TODO
+            declaration_location_reference: None,
+            value_location_reference: None,
         }
     }
 }
