@@ -6815,22 +6815,25 @@ impl Element for EditorElement {
                         }
                     };
 
-                    // TODO: Autoscrolling for both axes
+                    // Autoscrolling for both axes
                     let mut autoscroll_request = None;
                     let mut autoscroll_containing_element = false;
+                    let mut autoscroll_vertically = false;
                     let mut autoscroll_horizontally = false;
                     self.editor.update(cx, |editor, cx| {
                         autoscroll_request = editor.autoscroll_request();
                         autoscroll_containing_element =
                             autoscroll_request.is_some() || editor.has_pending_selection();
-                        // TODO: Is this horizontal or vertical?!
-                        autoscroll_horizontally = editor.autoscroll_vertically(
+                        // Handle vertical autoscrolling
+                        autoscroll_vertically = editor.autoscroll_vertically(
                             bounds,
                             line_height,
                             max_scroll_top,
                             window,
                             cx,
                         );
+                        // Set horizontal autoscrolling flag based on whether we have an autoscroll request
+                        autoscroll_horizontally = autoscroll_containing_element;
                         snapshot = editor.snapshot(window, cx);
                     });
 
