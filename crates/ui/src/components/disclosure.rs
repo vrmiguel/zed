@@ -11,6 +11,7 @@ pub struct Disclosure {
     selected: bool,
     on_toggle: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     cursor_style: CursorStyle,
+    icon_color: Option<Color>,
 }
 
 impl Disclosure {
@@ -21,6 +22,7 @@ impl Disclosure {
             selected: false,
             on_toggle: None,
             cursor_style: CursorStyle::PointingHand,
+            icon_color: None,
         }
     }
 
@@ -29,6 +31,12 @@ impl Disclosure {
         handler: impl Into<Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>>,
     ) -> Self {
         self.on_toggle = handler.into();
+        self
+    }
+    
+    /// Sets the color of the disclosure icon
+    pub fn icon_color(mut self, color: Color) -> Self {
+        self.icon_color = Some(color);
         self
     }
 }
@@ -62,7 +70,7 @@ impl RenderOnce for Disclosure {
             },
         )
         .shape(IconButtonShape::Square)
-        .icon_color(Color::Muted)
+        .icon_color(self.icon_color.unwrap_or(Color::Muted))
         .icon_size(IconSize::Small)
         .toggle_state(self.selected)
         .when_some(self.on_toggle, move |this, on_toggle| {

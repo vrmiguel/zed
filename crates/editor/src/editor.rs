@@ -182,7 +182,7 @@ use theme::{
     ThemeColors, ThemeSettings,
 };
 use ui::{
-    h_flex, prelude::*, ButtonSize, ButtonStyle, Disclosure, IconButton, IconName, IconSize, Key,
+    h_flex, prelude::*, ButtonSize, ButtonStyle, Color, Disclosure, IconButton, IconName, IconSize, Key,
     Tooltip,
 };
 use util::{defer, maybe, post_inc, RangeExt, ResultExt, TryFutureExt};
@@ -5982,6 +5982,99 @@ impl Editor {
         self.tasks.clear()
     }
 
+    /// Checks if a fold range at the given buffer row contains any breakpoints
+    ///
+    /// This is used to determine if a toggle symbol should be colored with the debugger accent color
+    fn fold_range_contains_breakpoints(
+        &self,
+        buffer_row: MultiBufferRow,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> bool {
+        // Get a snapshot of the editor's state
+        let snapshot = self.snapshot(window, cx);
+        
+        // Try to get the crease (fold) at this row
+        if let Some(crease) = snapshot.crease_snapshot.query_row(buffer_row, &snapshot.buffer_snapshot) {
+            // Get the range covered by this fold
+            let range = match crease {
+                Crease::Inline { range, .. } => range,
+                Crease::Block { range, .. } => range,
+            };
+            
+            // Convert buffer points to display rows for active_breakpoints function
+            let start_display_row = snapshot.point_to_display_point(
+                MultiBufferPoint::new(range.start.row, range.start.column)
+            ).row;
+            
+            let end_display_row = snapshot.point_to_display_point(
+                MultiBufferPoint::new(range.end.row, range.end.column)
+            ).row;
+            
+            // Get all breakpoints in this display row range
+            let breakpoints = Editor::update_editor_via_snapshot(
+                window,
+                cx,
+                self.entity(),
+                move |editor, cx| {
+                    editor.active_breakpoints(
+                        start_display_row..end_display_row.next(),
+                        window,
+                        cx
+                    )
+                }
+            );
+            
+            // If there are any breakpoints in the range, return true
+            !breakpoints.is_empty()
+        } else if self.starts_indent(buffer_row) {
+            // For indentation-based folds, check if any child lines have breakpoints
+            let indentation = self.line_indent_for_buffer_row(buffer_row);
+            
+            // Find the end of the indentation fold
+            let max_row = self.buffer_snapshot.max_row();
+            let mut end_row = buffer_row.0;
+            
+            for row in buffer_row.0 + 1..=max_row.0 {
+                let line_indent = self.line_indent_for_buffer_row(MultiBufferRow(row));
+                if !line_indent.is_line_blank() && line_indent.raw_len() <= indentation.raw_len() {
+                    end_row = row - 1;
+                    break;
+                }
+                end_row = row;
+            }
+            
+            // Convert buffer rows to display rows
+            let snapshot = self.snapshot(window, cx);
+            let start_display_row = snapshot.point_to_display_point(
+                MultiBufferPoint::new(buffer_row.0, 0)
+            ).row;
+            let end_display_row = snapshot.point_to_display_point(
+                MultiBufferPoint::new(end_row, 0)
+            ).row;
+            
+            // Get all breakpoints in this display row range
+            let breakpoints = Editor::update_editor_via_snapshot(
+                window,
+                cx,
+                self.entity(),
+                move |editor, cx| {
+                    editor.active_breakpoints(
+                        start_display_row..end_display_row.next(),
+                        window,
+                        cx
+                    )
+                }
+            );
+            
+            // If there are any breakpoints in the range, return true
+            !breakpoints.is_empty()
+        } else {
+            // No fold at this row
+            false
+        }
+    }
+
     fn insert_tasks(&mut self, key: (BufferId, BufferRow), value: RunnableTasks) {
         if self.tasks.insert(key, value).is_some() {
             // This case should hopefully be rare, but just in case...
@@ -5993,7 +6086,7 @@ impl Editor {
     ///
     /// This function is used to handle overlaps between breakpoints and Code action/runner symbol.
     /// It's also used to set the color of line numbers with breakpoints to the breakpoint color.
-    /// TODO debugger: Use this function to color toggle symbols that house nested breakpoints
+    /// It's also used to color toggle symbols that house nested breakpoints.
     fn active_breakpoints(
         &mut self,
         range: Range<DisplayRow>,
@@ -18383,6 +18476,9 @@ impl EditorSnapshot {
     ) -> Option<AnyElement> {
         let folded = self.is_line_folded(buffer_row);
         let mut is_foldable = false;
+        
+        // Check if this fold contains any breakpoints
+        let contains_breakpoints = self.fold_range_contains_breakpoints(buffer_row, window, cx);
 
         if let Some(crease) = self
             .crease_snapshot
@@ -18423,18 +18519,22 @@ impl EditorSnapshot {
         is_foldable |= self.starts_indent(buffer_row);
 
         if folded || (is_foldable && (row_contains_cursor || self.gutter_hovered)) {
-            Some(
-                Disclosure::new(("gutter_crease", buffer_row.0), !folded)
-                    .toggle_state(folded)
-                    .on_click(window.listener_for(&editor, move |this, _e, window, cx| {
-                        if folded {
-                            this.unfold_at(&UnfoldAt { buffer_row }, window, cx);
-                        } else {
-                            this.fold_at(&FoldAt { buffer_row }, window, cx);
-                        }
-                    }))
-                    .into_any_element(),
-            )
+            let mut disclosure = Disclosure::new(("gutter_crease", buffer_row.0), !folded)
+                .toggle_state(folded)
+                .on_click(window.listener_for(&editor, move |this, _e, window, cx| {
+                    if folded {
+                        this.unfold_at(&UnfoldAt { buffer_row }, window, cx);
+                    } else {
+                        this.fold_at(&FoldAt { buffer_row }, window, cx);
+                    }
+                }));
+            
+            // If the fold range contains breakpoints, color the toggle with the debugger accent color
+            if contains_breakpoints {
+                disclosure = disclosure.icon_color(ui::Color::Debugger);
+            }
+            
+            Some(disclosure.into_any_element())
         } else {
             None
         }
