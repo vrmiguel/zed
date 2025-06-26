@@ -190,6 +190,16 @@ pub enum MarkdownEvent {
     TaskListMarker(bool),
 }
 
+/// The delimiter type for a list.
+/// Bullets are used for unordered lists and numbers/letters for ordered lists.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ListDelimiter {
+    /// An unordered list marker (bullet point).
+    Bullet,
+    /// An ordered list marker (number or letter).
+    Ordered,
+}
+
 /// Tags for elements that can contain other elements.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MarkdownTag {
@@ -218,7 +228,9 @@ pub enum MarkdownTag {
 
     /// A list. If the list is ordered the field indicates the number of the first item.
     /// Contains only list items.
-    List(Option<u64>), // TODO: add delim and tight for ast (not needed for html)
+    /// The `delim` field indicates the delimiter type (bullet, ordered).
+    /// The `tight` field indicates whether the list is tight (items not separated by blank lines).
+    List(Option<u64>, ListDelimiter, bool),
 
     /// A list item.
     Item,
@@ -317,7 +329,17 @@ impl From<pulldown_cmark::Tag<'_>> for MarkdownTag {
                     CodeBlockKind::Fenced(SharedString::from(info.into_string())),
                 ),
             },
-            pulldown_cmark::Tag::List(start_number) => MarkdownTag::List(start_number),
+            pulldown_cmark::Tag::List(start_number) => {
+                // Default to Bullet for unordered lists and Ordered for ordered lists
+                let delim = if start_number.is_some() {
+                    ListDelimiter::Ordered
+                } else {
+                    ListDelimiter::Bullet
+                };
+                // Default to true for tight list (most common case)
+                let tight = true;
+                MarkdownTag::List(start_number, delim, tight)
+            },
             pulldown_cmark::Tag::Item => MarkdownTag::Item,
             pulldown_cmark::Tag::FootnoteDefinition(label) => {
                 MarkdownTag::FootnoteDefinition(SharedString::from(label.to_string()))
